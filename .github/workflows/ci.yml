@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --quiet PyYAML
+
+      - name: Validate YAML files
+        run: |
+          python3 -c "
+          import yaml, sys, pathlib
+          errors = 0
+          for f in pathlib.Path('.').rglob('*.yml'):
+              if '.github' in str(f):
+                  continue
+              try:
+                  with open(f) as fh:
+                      yaml.safe_load(fh)
+                  print(f'  OK  {f}')
+              except yaml.YAMLError as e:
+                  print(f'  FAIL {f}: {e}')
+                  errors += 1
+          for f in pathlib.Path('.').rglob('*.yaml'):
+              try:
+                  with open(f) as fh:
+                      yaml.safe_load(fh)
+                  print(f'  OK  {f}')
+              except yaml.YAMLError as e:
+                  print(f'  FAIL {f}: {e}')
+                  errors += 1
+          for f in pathlib.Path('.').rglob('*.md'):
+              try:
+                  text = f.read_text()
+                  print(f'  OK  {f} ({len(text)} chars)')
+              except Exception as e:
+                  print(f'  FAIL {f}: {e}')
+                  errors += 1
+          sys.exit(errors)
+          "
+
+      - name: Validate docker-compose
+        run: |
+          python3 -c "
+          import yaml, sys
+          with open('docker-compose.yml') as f:
+              cfg = yaml.safe_load(f)
+          services = cfg.get('services', {})
+          assert 'postgres' in services, 'postgres service missing'
+          assert 'redis' in services, 'redis service missing'
+          pg = services['postgres']
+          rd = services['redis']
+          assert 'healthcheck' in pg, 'postgres has no healthcheck'
+          assert 'healthcheck' in rd, 'redis has no healthcheck'
+          assert pg['restart'] == 'unless-stopped', 'postgres restart policy wrong'
+          assert rd['restart'] == 'unless-stopped', 'redis restart policy wrong'
+          print('docker-compose.yml: valid, both services have healthchecks')
+          "
