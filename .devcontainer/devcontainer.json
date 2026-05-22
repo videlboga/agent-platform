@@ -1,0 +1,26 @@
+{
+  "name": "Agent Platform Worker",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "forwardPorts": [],
+  "postCreateCommand": "pip install --quiet playwright pillow requests pixelmatch && npx playwright install chromium && mkdir -p /workspaces/agent-platform/screenshots/baseline",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "github.vscode-github-actions"
+      ]
+    }
+  },
+  "hostRequirements": {
+    "memory": "4gb"
+  }
+}
