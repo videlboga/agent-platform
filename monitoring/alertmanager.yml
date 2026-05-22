@@ -1,0 +1,31 @@
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 4h
+  routes:
+    - receiver: 'critical'
+      match:
+        severity: critical
+      repeat_interval: 30m
+    - receiver: 'warning'
+      match:
+        severity: warning
+      repeat_interval: 2h
+
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://hermes:9119/api/kanban/alert'
+        send_resolved: true
+
+  - name: 'critical'
+    webhook_configs:
+      - url: 'http://hermes:9119/api/kanban/alert'
+        send_resolved: true
+
+  - name: 'warning'
+    webhook_configs:
+      - url: 'http://hermes:9119/api/kanban/alert'
+        send_resolved: true
