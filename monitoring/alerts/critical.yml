@@ -1,0 +1,138 @@
+# Agent Platform — Critical Prometheus Alert Rules
+# All rules check every 15s (matching evaluation_interval)
+# Severities: critical → pages, warning → dashboard/chat
+
+groups:
+  - name: agent-platform-critical
+    interval: 15s
+    rules:
+
+      # ── Database & Cache ──────────────────────────────────────
+
+      - alert: PostgresDown
+        expr: health_up{service="db"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is unreachable"
+          description: "Health check to postgres@{{ $labels.instance }} failed for >30s. Control-plane tasks will stall."
+          runbook: "ssh control → docker compose ps postgres → docker compose logs postgres"
+
+      - alert: RedisDown
+        expr: health_up{service="redis"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is unreachable"
+          description: "Health check to redis@{{ $labels.instance }} failed for >30s. Queue and pub/sub are down."
+          runbook: "ssh control → docker compose ps redis → docker compose logs redis"
+
+      - alert: BothBackendsDegraded
+        expr: health_up{service="db"} + health_up{service="redis"} < 2
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Both DB and Redis are down"
+          description: "Control-plane is entirely offline. At least one backend must be up."
+
+      # ── System Resources ──────────────────────────────────────
+
+      - alert: HighMemoryUsage
+        expr: system_mem_used_pct > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory usage >85%"
+          description: "Memory at {{ $value }}% on {{ $labels.instance }}. May OOM under load."
+
+      - alert: CriticalMemoryUsage
+        expr: system_mem_used_pct > 95
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Memory usage >95% — OOM risk"
+          description: "Memory at {{ $value }}% on {{ $labels.instance }}. Immediate investigation needed."
+          runbook: "ssh control → free -h; docker stats --no-stream"
+
+      - alert: HighDiskUsage
+        expr: system_disk_used_pct > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage >85%"
+          description: "Disk at {{ $value }}% on {{ $labels.instance }}. 17% left (~{{ $labels.disk_total }} total)."
+
+      - alert: CriticalDiskUsage
+        expr: system_disk_used_pct > 95
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk usage >95% — exhaustion imminent"
+          description: "Disk at {{ $value }}% on {{ $labels.instance }}. Docker and PG may fail."
+          runbook: "ssh control → df -h /; docker system prune -af"
+
+      - alert: HighCPULoad
+        expr: system_load_1min > 0.9
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU load >0.9 (1-core box)"
+          description: "1-minute load average is {{ $value }}. Single-core VPS is saturated."
+
+      - alert: HighSwapUsage
+        expr: system_swap_used_mb > 500
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Swap usage >500MB"
+          description: "Swap at {{ $value }}MB. Memory pressure is real."
+
+      - alert: CriticalSwapUsage
+        expr: system_swap_used_mb > 1000
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Swap usage >1GB — out of memory"
+          description: "Swap at {{ $value }}MB. System is thrashing."
+
+      # ── Infrastructure Availability ────────────────────────────
+
+      - alert: HealthCheckNotReporting
+        expr: absent(health_up)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Health check /metrics is not reporting"
+          description: "No health_up metric received for >1m. The health service may be down."
+          runbook: "ssh control → docker compose ps health-check → docker compose logs health-check"
+
+      - alert: ScrapeTargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+          description: "Target {{ $labels.instance }} has not been scraped for >1m."
+
+      # ── Proactive ──────────────────────────────────────────────
+
+      - alert: InstanceRestarted
+        expr: time() - process_start_time_seconds{job="health-server"} > 300
+        for: 0s
+        labels:
+          severity: info
+        annotations:
+          summary: "Health server restart detected"
+          description: "Uptime suggests health server was restarted within last 5 minutes."

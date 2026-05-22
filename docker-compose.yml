@@ -22,7 +22,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --bind 127.0.0.1 --protected-mode yes
+    command: redis-server --appendonly yes --protected-mode yes
     volumes:
       - redis_data:/data
     healthcheck:
@@ -31,6 +31,61 @@ services:
       timeout: 5s
       retries: 5
 
+  health-check:
+    build:
+      context: ./health-check
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9100:9100"
+    environment:
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_USER: ${POSTGRES_USER:-agent}
+      PG_PASSWORD: ${POSTGRES_PASSWORD}
+      PG_DB: ${POSTGRES_DB:-agent_platform}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.2.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.enable-lifecycle
+    volumes:
+      - ./configs/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/monitoring/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - health-check
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./configs/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  alertmanager_data:

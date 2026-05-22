@@ -61,13 +61,20 @@ jobs:
           with open('docker-compose.yml') as f:
               cfg = yaml.safe_load(f)
           services = cfg.get('services', {})
+          expected = ['postgres', 'redis', 'health-check', 'prometheus', 'alertmanager']
           assert 'postgres' in services, 'postgres service missing'
           assert 'redis' in services, 'redis service missing'
+          assert 'health-check' in services, 'health-check service missing'
+          assert 'prometheus' in services, 'prometheus service missing'
+          assert 'alertmanager' in services, 'alertmanager service missing'
           pg = services['postgres']
           rd = services['redis']
           assert 'healthcheck' in pg, 'postgres has no healthcheck'
           assert 'healthcheck' in rd, 'redis has no healthcheck'
           assert pg['restart'] == 'unless-stopped', 'postgres restart policy wrong'
           assert rd['restart'] == 'unless-stopped', 'redis restart policy wrong'
-          print('docker-compose.yml: valid, both services have healthchecks')
+          for svc in ['health-check', 'prometheus', 'alertmanager']:
+              assert services[svc]['restart'] == 'unless-stopped', f'{svc} restart policy wrong'
+          print('docker-compose.yml: valid — all 5 services present with correct config')
+          print(f'Services: {list(services.keys())}')
           "
