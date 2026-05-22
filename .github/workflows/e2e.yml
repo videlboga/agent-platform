@@ -1,0 +1,68 @@
+name: E2E Visual Regression
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip dependencies
+        run: |
+          python3 -m pip install --quiet --upgrade pip
+          pip install --quiet playwright pillow requests pixelmatch
+
+      - name: Install Playwright Chromium
+        run: |
+          python3 -m playwright install chromium
+
+      - name: Start test server & take screenshots
+        run: |
+          # Server must be started in the same step as the screenshot
+          # because background processes don't survive across steps in GA
+          python3 -m http.server 8080 --directory e2e-test &
+          SERVER_PID=$!
+          sleep 2
+          curl -sf http://localhost:8080/ > /dev/null && echo "Server is up"
+
+          python3 scripts/e2e-screenshot.py \
+            --url http://localhost:8080/ \
+            --output screenshots/current/dashboard.png \
+            --diff-output screenshots/current/dashboard.diff.png \
+            --baseline screenshots/baseline/dashboard.png \
+            --viewport 1280,720 \
+            --wait 2 \
+            --selector "body" \
+            --threshold 0.05
+
+          kill $SERVER_PID 2>/dev/null || true
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diffs
+          path: |
+            screenshots/current/
+            screenshots/baseline/
+          retention-days: 14
+
+      - name: Upload screenshots always
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: screenshots/current/
+          retention-days: 7
