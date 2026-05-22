@@ -22,7 +22,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --bind 127.0.0.1 --protected-mode yes
+    command: redis-server --appendonly yes --protected-mode yes
     volumes:
       - redis_data:/data
     healthcheck:
