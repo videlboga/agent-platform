@@ -70,7 +70,7 @@ def take_screenshot(url, output, viewport, wait, selector, full_page):
 
 def diff_images(baseline_path, current_path, diff_output, threshold):
     from PIL import Image
-    import pixelmatch
+    import pixelmatch as _pm
 
     im1 = Image.open(baseline_path).convert("RGBA")
     im2 = Image.open(current_path).convert("RGBA")
@@ -80,19 +80,22 @@ def diff_images(baseline_path, current_path, diff_output, threshold):
         im2 = im2.resize(im1.size, Image.LANCZOS)
 
     w, h = im1.size
-    diff_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     total = w * h
 
-    diff_pixels = pixelmatch.contrib.pixelmatch(
+    # pixelmatch needs a mutable output buffer
+    diff_img = bytearray(b"\x00\x00\x00\x00" * total)
+
+    diff_pixels = _pm.pixelmatch(
         im1.tobytes(),
         im2.tobytes(),
         w, h,
-        output=diff_img.tobytes(),
-        threshold=0.1,
+        output=diff_img,
+        threshold=threshold,
     )
 
-    # pixelmatch returns pixel count; save the diff
-    diff_img.save(diff_output)
+    # reconstruct PIL Image from the diff buffer
+    diff_pil = Image.frombytes("RGBA", (w, h), bytes(diff_img))
+    diff_pil.save(diff_output)
 
     ratio = diff_pixels / total if total > 0 else 0
     return ratio, diff_pixels, total
