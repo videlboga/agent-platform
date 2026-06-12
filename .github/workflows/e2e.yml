@@ -19,13 +19,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
+      - name: Restore Playwright browsers cache
+        id: playwright-cache-restore
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('.github/workflows/e2e.yml') }}
-          save-always: true
 
       - name: Install pip dependencies
         run: |
@@ -33,13 +32,12 @@ jobs:
           pip install --quiet playwright pillow requests pixelmatch
 
       - name: Install Playwright Chromium
+        if: steps.playwright-cache-restore.outputs.cache-hit != 'true'
         run: |
           python3 -m playwright install chromium
 
       - name: Start test server & take screenshots
         run: |
-          # Server must be started in the same step as the screenshot
-          # because background processes don't survive across steps in GA
           python3 -m http.server 8080 --directory e2e-test &
           SERVER_PID=$!
           sleep 2
@@ -56,6 +54,13 @@ jobs:
             --threshold 0.05
 
           kill $SERVER_PID 2>/dev/null || true
+
+      - name: Save Playwright browsers cache
+        uses: actions/cache/save@v4
+        if: always() && steps.playwright-cache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('.github/workflows/e2e.yml') }}
 
       - name: Upload screenshots on failure
         if: failure()
